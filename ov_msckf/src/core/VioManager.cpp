@@ -178,9 +178,18 @@ void VioManager::feed_measurement_imu(const ov_core::ImuData &message) {
 
   // Push back to our initializer
   if (!is_initialized_vio) {
-    initializer->feed_imu(message, oldest_time);
+    initializer->feed_imu(message, oldest_time);    
   }
 
+	// nithin debug print
+	// static int imu_dbg = 0;
+	// if (++imu_dbg % 100 == 0) {
+	//     PRINT_INFO("[VIO] IMU pushed ts=%.6f oldest=%.6f\n",
+	// 	       message.timestamp,
+	// 	       oldest_time);
+	// }
+	// EOF nithin debug print
+	
   // Push back to the zero velocity updater if it is enabled
   // No need to push back if we are just doing the zv-update at the begining and we have moved
   if (is_initialized_vio && updaterZUPT != nullptr && (!params.zupt_only_at_beginning || !has_moved_since_zupt)) {

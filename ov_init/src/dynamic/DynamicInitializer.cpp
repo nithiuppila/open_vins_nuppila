@@ -44,6 +44,12 @@ using namespace ov_init;
 bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covariance, std::vector<std::shared_ptr<ov_type::Type>> &order,
                                     std::shared_ptr<ov_type::IMU> &_imu, std::map<double, std::shared_ptr<ov_type::PoseJPL>> &_clones_IMU,
                                     std::unordered_map<size_t, std::shared_ptr<ov_type::Landmark>> &_features_SLAM) {
+                                    
+// nithin debug print
+// PRINT_INFO("[INIT-D] imu_data_ptr=%p size_before=%zu\n",
+//            imu_data.get(),
+//            imu_data ? imu_data->size() : 0);
+// EOF nithin debug print                                               
 
   // Get the newest and oldest timestamps we will try to initialize between!
   auto rT1 = boost::posix_time::microsec_clock::local_time();
@@ -63,17 +69,42 @@ bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarian
   // Remove all measurements that are older than our initialization window
   // Then we will try to use all features that are in the feature database!
   _db->cleanup_measurements(oldest_time);
+  
+  // nithin debug print
+	  PRINT_INFO("[INIT-D] feature_db_size=%zu init_max_features=%d\n",
+		   _db->get_internal_data().size(),
+		   params.init_max_features);
+	PRINT_INFO("[INIT-D] newest_cam=%.6f oldest=%.6f imu_buffer=%zu\n",
+		   newest_cam_time,
+		   oldest_time,
+		   imu_data->size());           
+  // EOF nithin debug print
+  
   bool have_old_imu_readings = false;
   auto it_imu = imu_data->begin();
   while (it_imu != imu_data->end() && it_imu->timestamp < oldest_time + params.calib_camimu_dt) {
     have_old_imu_readings = true;
     it_imu = imu_data->erase(it_imu);
   }
+	// nithin debug print
+	PRINT_INFO("[INIT-D] imu_after_cleanup=%zu have_old_imu=%d\n",
+		   imu_data->size(),
+		   have_old_imu_readings);
+	// EOF nithin debug print  
   if (_db->get_internal_data().size() < 0.75 * params.init_max_features) {
     PRINT_WARNING(RED "[init-d]: only %zu valid features of required (%.0f thresh)!!\n" RESET, _db->get_internal_data().size(),
                   0.95 * params.init_max_features);
     return false;
   }
+  
+  // nithin debug print
+	PRINT_INFO("[INIT-D] imu_size=%zu have_old=%d oldest_time=%.6f newest_cam=%.6f\n",
+		   imu_data->size(),
+		   have_old_imu_readings,
+		   oldest_time,
+		   newest_cam_time);  
+  // EOF nithin debug print
+    
   if (imu_data->size() < 2 || !have_old_imu_readings) {
     // PRINT_WARNING(RED "[init-d]: waiting for window to reach full size (%zu imu readings)!!\n" RESET, imu_data->size());
     return false;
@@ -175,6 +206,14 @@ bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarian
   double time0_in_imu = oldest_camera_time + params.calib_camimu_dt;
   double time1_in_imu = newest_cam_time + params.calib_camimu_dt;
   std::vector<ov_core::ImuData> readings = InitializerHelper::select_imu_readings(*imu_data, time0_in_imu, time1_in_imu);
+  
+  // nithin - debug print
+	PRINT_INFO("[INIT-D] imu_window %.6f -> %.6f  readings=%zu\n",
+		   time0_in_imu,
+		   time1_in_imu,
+		   readings.size());  
+  // EOF nithin - debug print
+    
   assert(readings.size() > 2);
   for (size_t k = 0; k < readings.size() - 1; k++) {
     auto imu0 = readings.at(k);

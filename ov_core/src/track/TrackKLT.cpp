@@ -33,6 +33,13 @@ using namespace ov_core;
 
 void TrackKLT::feed_new_camera(const CameraData &message) {
 
+  // nithin debug print
+// PRINT_INFO("[KLT] feed_new_camera: sensor_ids=%zu images=%zu masks=%zu\n",
+//            message.sensor_ids.size(),
+//            message.images.size(),
+//            message.masks.size());  
+  // EOF nithin debug print
+  
   // Error check that we have all the data
   if (message.sensor_ids.empty() || message.sensor_ids.size() != message.images.size() || message.images.size() != message.masks.size()) {
     PRINT_ERROR(RED "[ERROR]: MESSAGE DATA SIZES DO NOT MATCH OR EMPTY!!!\n" RESET);
@@ -111,7 +118,7 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
     // Detect new features
     std::vector<cv::KeyPoint> good_left;
     std::vector<size_t> good_ids_left;
-    perform_detection_monocular(imgpyr, mask, good_left, good_ids_left);
+    perform_detection_monocular(imgpyr, mask, good_left, good_ids_left); 
     // Save the current image and pyramid
     std::lock_guard<std::mutex> lckv(mtx_last_vars);
     img_last[cam_id] = img;
@@ -136,6 +143,28 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
 
   // Lets track temporally
   perform_matching(img_pyramid_last[cam_id], imgpyr, pts_left_old, pts_left_new, cam_id, cam_id, mask_ll);
+  
+    // nithin debug print
+	// static int klt_dbg = 0;
+	// if (++klt_dbg % 30 == 0)
+	// {
+	//     int tracked = 0;
+
+	//     for (auto ok : mask_ll)
+	//     {
+	// 	if (ok)
+	// 	    tracked++;
+	//     }
+
+	//     std::cout
+	// 	<< "[KLT] tracked="
+	// 	<< tracked
+	// 	<< " total="
+	// 	<< mask_ll.size()
+	// 	<< std::endl;
+	// }
+    // EOF nithin debug print	  
+  
   assert(pts_left_new.size() == ids_left_old.size());
   rT4 = boost::posix_time::microsec_clock::local_time();
 

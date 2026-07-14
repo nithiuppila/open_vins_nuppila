@@ -56,6 +56,13 @@ void InertialInitializer::feed_imu(const ov_core::ImuData &message, double oldes
 
   // Append it to our vector
   imu_data->emplace_back(message);
+  
+	// nithin debug print
+	// PRINT_INFO("[INIT-IMU] imu_data_ptr=%p size=%zu ts=%.6f\n",
+	// 	   imu_data.get(),
+	// 	   imu_data->size(),
+	// 	   message.timestamp);
+	// EOF nithin debug print  
 
   // Sort our imu data (handles any out of order measurements)
   // std::sort(imu_data->begin(), imu_data->end(), [](const IMUDATA i, const IMUDATA j) {
@@ -64,6 +71,15 @@ void InertialInitializer::feed_imu(const ov_core::ImuData &message, double oldes
 
   // Loop through and delete imu messages that are older than our requested time
   // std::cout << "INIT: imu_data.size() " << imu_data->size() << std::endl;
+
+  // nithin debug print - BEFORE_CLEANUP
+  if (!imu_data->empty()) {
+    PRINT_INFO("[INIT-IMU] oldest_time=%.6f imu_first_ts=%.6f imu_last_ts=%.6f size_before=%zu\n",
+               oldest_time, imu_data->front().timestamp, imu_data->back().timestamp, imu_data->size());
+  }
+  // EOF nithin debug print - BEFORE_CLEANUP  
+
+
   if (oldest_time != -1) {
     auto it0 = imu_data->begin();
     while (it0 != imu_data->end()) {
@@ -74,6 +90,12 @@ void InertialInitializer::feed_imu(const ov_core::ImuData &message, double oldes
       }
     }
   }
+  
+// nithin debug print
+  PRINT_INFO("[INIT-IMU] after_cleanup size=%zu\n",
+             imu_data->size());
+// EOF nithin debug print  
+  
 }
 
 bool InertialInitializer::initialize(double &timestamp, Eigen::MatrixXd &covariance, std::vector<std::shared_ptr<ov_type::Type>> &order,
@@ -96,6 +118,11 @@ bool InertialInitializer::initialize(double &timestamp, Eigen::MatrixXd &covaria
   // Remove all measurements that are older then our initialization window
   // Then we will try to use all features that are in the feature database!
   _db->cleanup_measurements(oldest_time);
+	// nithin debug print
+	PRINT_INFO("[INIT] imu_data_ptr=%p size=%zu\n",
+		   static_cast<void*>(imu_data.get()),
+		   imu_data->size());
+	// EOF nithin debug print  
   auto it_imu = imu_data->begin();
   while (it_imu != imu_data->end() && it_imu->timestamp < oldest_time + params.calib_camimu_dt) {
     it_imu = imu_data->erase(it_imu);
@@ -110,6 +137,16 @@ bool InertialInitializer::initialize(double &timestamp, Eigen::MatrixXd &covaria
     // Get the disparity statistics from this image to the previous
     // Only compute the disparity for the oldest half of the initialization period
     double newest_time_allowed = newest_cam_time - 0.5 * params.init_window_time;
+
+    // nithin debug print
+    PRINT_INFO("[INIT_TIME] newest=%.6f oldest=%.6f split=%.6f window=%.3f\n",
+           newest_cam_time,
+           oldest_time,
+           newest_time_allowed,
+           params.init_window_time);
+    // EOF nithin debug print
+
+
     int num_features0 = 0;
     int num_features1 = 0;
     double avg_disp0, avg_disp1;
@@ -137,13 +174,29 @@ bool InertialInitializer::initialize(double &timestamp, Eigen::MatrixXd &covaria
   bool is_still = (!disparity_detected_moving_1to0 && !disparity_detected_moving_2to1);
   if (((has_jerk && wait_for_jerk) || (is_still && !wait_for_jerk)) && params.init_imu_thresh > 0.0) {
     PRINT_DEBUG(GREEN "[init]: USING STATIC INITIALIZER METHOD!\n" RESET);
+    
+    // nithin debug print
+    PRINT_INFO("[INIT] Calling STATIC initializer\n");
+    // EOF nithin debug print
+        
     return init_static->initialize(timestamp, covariance, order, t_imu, wait_for_jerk);
   } else if (params.init_dyn_use && !is_still) {
 #ifndef __ANDROID__
     PRINT_DEBUG(GREEN "[init]: USING DYNAMIC INITIALIZER METHOD!\n" RESET);
+
+    // nithin debug print
+    PRINT_INFO("[INIT] Calling DYNAMIC initializer\n");
+    // EOF nithin debug print
+        
     std::map<double, std::shared_ptr<ov_type::PoseJPL>> _clones_IMU;
     std::unordered_map<size_t, std::shared_ptr<ov_type::Landmark>> _features_SLAM;
+    // nithin debug print
+    PRINT_INFO("[INIT] init_dynamic ptr=%p\n", init_dynamic.get());
+    // EOF nithin debug print    
     if (init_dynamic) {
+    // nithin debug print
+    PRINT_INFO("[INIT] About to call DynamicInitializer::initialize()\n");
+    // EOF nithin debug print    
       return init_dynamic->initialize(timestamp, covariance, order, t_imu, _clones_IMU, _features_SLAM);
     }
 #else
@@ -155,5 +208,8 @@ bool InertialInitializer::initialize(double &timestamp, Eigen::MatrixXd &covaria
     msg += (is_still) ? "" : "platform moving too much";
     PRINT_INFO(YELLOW "[init]: failed static init: %s\n" RESET, msg.c_str());
   }
+    // nithin debug print  
+  PRINT_INFO("[INIT] Initialization returned FALSE\n");
+    // EOF nithin debug print  
   return false;
 }

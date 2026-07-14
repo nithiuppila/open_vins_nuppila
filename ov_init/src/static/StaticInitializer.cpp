@@ -37,14 +37,35 @@ using namespace ov_init;
 bool StaticInitializer::initialize(double &timestamp, Eigen::MatrixXd &covariance, std::vector<std::shared_ptr<Type>> &order,
                                    std::shared_ptr<IMU> t_imu, bool wait_for_jerk) {
 
+  // nithin - debug print
+  printf("[STATIC] imu_ptr=%p imu_size=%zu\n",
+        static_cast<void*>(imu_data.get()),
+        imu_data->size());
+  fflush(stdout);
+  // EOF nithin - debug print
+
   // Return if we don't have any measurements
   if (imu_data->size() < 2) {
     return false;
   }
 
+  // nithin debug print
+  printf("[STATIC] passed size check\n");
+  fflush(stdout);
+  // EOF nithin debug print
+
   // Newest and oldest imu timestamp
   double newesttime = imu_data->at(imu_data->size() - 1).timestamp;
   double oldesttime = imu_data->at(0).timestamp;
+
+  // nithin debug print
+  printf("[STATIC] newest=%f oldest=%f diff=%f window=%f\n",
+        newesttime,
+        oldesttime,
+        newesttime - oldesttime,
+        params.init_window_time);
+  fflush(stdout);
+  // EOF nithin debug print
 
   // Return if we don't have enough for two windows
   if (newesttime - oldesttime < params.init_window_time) {
@@ -65,6 +86,14 @@ bool StaticInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarianc
 
   // Return if both of these failed
   if (window_1to0.size() < 2 || window_2to1.size() < 2) {
+
+    //  nithin - debug print
+    printf("[STATIC] window1=%zu window2=%zu\n",
+        window_1to0.size(),
+        window_2to1.size());
+    fflush(stdout);
+    //  EOF nithin - debug print    
+
     PRINT_INFO(YELLOW "[init-s]: unable to select window of IMU readings, not enough readings\n" RESET);
     return false;
   }
@@ -81,6 +110,11 @@ bool StaticInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarianc
   }
   a_var_1to0 = std::sqrt(a_var_1to0 / ((int)window_1to0.size() - 1));
 
+  // nithin debug print
+  printf("[STATIC] computed a_var_1to0=%.6f\n", a_var_1to0);
+  fflush(stdout);
+  // EOF nithin debug print
+
   // Calculate the sample variance for the second newest window from 2 to 1
   Eigen::Vector3d a_avg_2to1 = Eigen::Vector3d::Zero();
   Eigen::Vector3d w_avg_2to1 = Eigen::Vector3d::Zero();
@@ -95,7 +129,17 @@ bool StaticInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarianc
     a_var_2to1 += (data.am - a_avg_2to1).dot(data.am - a_avg_2to1);
   }
   a_var_2to1 = std::sqrt(a_var_2to1 / ((int)window_2to1.size() - 1));
+
+
   PRINT_DEBUG(YELLOW "[init-s]: IMU excitation stats: %.3f,%.3f\n" RESET, a_var_2to1, a_var_1to0);
+  // nithin debug print
+  printf("[STATIC] a_var_2to1=%.6f a_var_1to0=%.6f thresh=%.6f wait_for_jerk=%d\n",
+        a_var_2to1,
+        a_var_1to0,
+        params.init_imu_thresh,
+        wait_for_jerk);
+  fflush(stdout);
+  // EOF nithin debug print
 
   // If it is below the threshold and we want to wait till we detect a jerk
   if (a_var_1to0 < params.init_imu_thresh && wait_for_jerk) {
