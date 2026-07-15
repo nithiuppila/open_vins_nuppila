@@ -218,6 +218,20 @@ void TrackKLT::feed_monocular(const CameraData &message, size_t msg_id) {
   }
   rT5 = boost::posix_time::microsec_clock::local_time();
 
+  // nithin debug print - feature tracking health
+  static int klt_health_dbg = 0;
+  if (++klt_health_dbg % 30 == 0)
+  {
+      std::cout
+          << "[KLT_HEALTH] "
+          << "tracked=" << good_left.size()
+          << " candidates=" << pts_left_new.size()
+          << " lost=" << (pts_left_new.size() - good_left.size())
+          << " newly_detected=" << ((int)pts_last[cam_id].size() - pts_before_detect)
+          << std::endl;
+  }
+  // EOF nithin debug print
+
   // Timing information
   PRINT_ALL("[TIME-KLT]: %.4f seconds for pyramid\n", (rT2 - rT1).total_microseconds() * 1e-6);
   PRINT_ALL("[TIME-KLT]: %.4f seconds for detection (%zu detected)\n", (rT3 - rT2).total_microseconds() * 1e-6,

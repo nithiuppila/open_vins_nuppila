@@ -110,6 +110,22 @@ bool InertialInitializer::initialize(double &timestamp, Eigen::MatrixXd &covaria
       }
     }
   }
+
+  // nithin -- added the block
+  // nithin: feature-count gate before attempting DYNAMIC init. Real evidence:
+  // DYNAMIC init consistently triggers at feature-count crash points (~30-40
+  // features), producing poorly-conditioned scale recovery and later
+  // divergence. Refuse to attempt DYNAMIC init below a minimum count.
+  size_t current_feat_count = _db->get_internal_data().size();
+  constexpr size_t kMinFeatsForDynamicInit = 55;
+
+  if (params.init_dyn_use && current_feat_count < kMinFeatsForDynamicInit) {
+    PRINT_INFO("[INIT] Skipping DYNAMIC init attempt: feat_count=%zu < min=%zu\n",
+               current_feat_count, kMinFeatsForDynamicInit);
+    return false;
+  }
+  // EOF nithin -- added the block
+
   double oldest_time = newest_cam_time - params.init_window_time - 0.10;
   if (newest_cam_time < 0 || oldest_time < 0) {
     return false;
