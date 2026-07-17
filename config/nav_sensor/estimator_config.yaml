@@ -1,6 +1,6 @@
 %YAML:1.0 # need to specify the file type at the top!
 
-verbosity: "INFO" # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
+verbosity: "ALL" # ALL, DEBUG, INFO, WARNING, ERROR, SILENT
 
 use_fej: true # if first-estimate Jacobians should be used (enable for good consistency)
 integration: "rk4" # discrete, rk4, analytical (if rk4 or analytical used then analytical covariance propagation is used)
@@ -37,24 +37,24 @@ zupt_only_at_beginning: false
 # ==================================================================
 # ==================================================================
 
-init_window_time: 2.0 # how many seconds to collect initialization information
+init_window_time: 3.0 # how many seconds to collect initialization information
 init_imu_thresh: 1.5 # threshold for variance of the accelerometer to detect a "jerk" in motion
 init_max_disparity: 0.6 # max disparity to consider the platform stationary (dependent on resolution) — lowered from 10.0, scaled for our camera's actual focal length (205.47 vs EuRoC's 458.654)
-init_max_features: 50 # how many features to track during initialization (saves on computation)
+init_max_features: 200 # raised from 150 as a test — unproven whether achieved feature count scales with budget or is capped by scene richness; see handoff doc
 
-init_dyn_use: false # if dynamic initialization should be used
+init_dyn_use: true # if dynamic initialization should be used
 init_dyn_mle_opt_calib: false # if we should optimize calibration during intialization (not recommended)
-init_dyn_mle_max_iter: 50 # how many iterations the MLE refinement should use (zero to skip the MLE)
-init_dyn_mle_max_time: 0.05 # how many seconds the MLE should be completed in
+init_dyn_mle_max_iter: 200 # raised from 50 — consistently hitting this exact cap ("Maximum number of iterations reached") even with the increased time budget, meaning it needs more steps, not more time
+init_dyn_mle_max_time: 0.2 # raised from 0.05 — real solve times were consistently landing at 50-56ms, just over the old limit; every observed attempt had excellent linear-solve velocity (~0.01-0.03 m/s) and perfect gravity (9.8100) but was cut off mid-Ceres-optimization by this timeout
 init_dyn_mle_max_threads: 6 # how many threads the MLE should use
 init_dyn_num_pose: 6 # number of poses to use within our window time (evenly spaced)
-init_dyn_min_deg: 10.0 # orientation change needed to try to init
+init_dyn_min_deg: 8.0 # orientation change needed to try to init
 
 init_dyn_inflation_ori: 10 # what to inflate the recovered q_GtoI covariance by
 init_dyn_inflation_vel: 100 # what to inflate the recovered v_IinG covariance by
 init_dyn_inflation_bg: 10 # what to inflate the recovered bias_g covariance by
 init_dyn_inflation_ba: 100 # what to inflate the recovered bias_a covariance by
-init_dyn_min_rec_cond: 1e-12 # reciprocal condition number thresh for info inversion
+init_dyn_min_rec_cond: 1e-15 # loosened from 1e-12 — covariance recovery was consistently failing right after a clean, converged point estimate (position/velocity/gravity all good); this problem's Hessian appears close to but not within the old tolerance
 
 init_dyn_bias_g: [ 0.0, 0.0, 0.0 ] # initial gyroscope bias guess
 init_dyn_bias_a: [ 0.0, 0.0, 0.0 ] # initial accelerometer bias guess

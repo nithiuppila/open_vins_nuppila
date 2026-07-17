@@ -127,8 +127,12 @@ VioManager::VioManager(VioManagerOptions &params_) : thread_init_running(false),
 
   // Let's make a feature extractor
   // NOTE: after we initialize we will increase the total number of feature tracks
-  // NOTE: we will split the total number of features over all cameras uniformly
-  int init_max_features = std::floor((double)params.init_options.init_max_features / (double)params.state_options.num_cameras);
+  // NOTE: previously split across num_cameras, but _db holds one entry per stereo-matched
+  // feature (not per-camera-summed — TrackKLT::perform_matching calls database->update_feature()
+  // once per camera using the SAME feature id for both), so dividing here made the tracker's
+  // own target (50% of init_max_features) structurally unable to clear DynamicInitializer's
+  // requirement (75% of init_max_features) at any scale. Using the full value instead.
+  int init_max_features = params.init_options.init_max_features;
   if (params.use_klt) {
     trackFEATS = std::shared_ptr<TrackBase>(new TrackKLT(state->_cam_intrinsics_cameras, init_max_features,
                                                          state->_options.max_aruco_features, params.use_stereo, params.histogram_method,

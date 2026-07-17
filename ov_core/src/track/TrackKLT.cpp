@@ -426,7 +426,7 @@ void TrackKLT::feed_stereo(const CameraData &message, size_t msg_id_left, size_t
 
   // nithin debug print - stereo feature tracking health
   static int klt_stereo_health_dbg = 0;
-  if (++klt_stereo_health_dbg % 30 == 0)
+  if (++klt_stereo_health_dbg % 3 == 0)
   {
       std::cout
           << "[KLT_STEREO_HEALTH] "

@@ -1,9 +1,9 @@
 %YAML:1.0
 cam0:
-  T_imu_cam: #rotation from camera to IMU R_CtoI, position of camera in IMU p_CinI
-    - [0.000796, 0.999999, -0.000796, 0.0]
-    - [0.000000, -0.000796, -1.000000, 0.0]
-    - [-1.000000, 0.000796, -0.000001, 0.0]
+  T_imu_cam: #rotation from camera to IMU R_CtoI, position of camera in IMU p_CinI -- updated after downward-facing camera SDF fix (was sky-facing)
+    - [0.0, 0.0, 1.0, 0.0]
+    - [0.0, -1.0, 0.0, 0.0]
+    - [1.0, 0.0, 0.0, 0.0]
     - [0.0, 0.0, 0.0, 1.0]
   cam_overlaps: [1]
   camera_model: pinhole
@@ -13,10 +13,10 @@ cam0:
   resolution: [640, 480]
   rostopic: /nav_sensor/cam0/image_raw
 cam1:
-  T_imu_cam: #rotation from camera to IMU R_CtoI, position of camera in IMU p_CinI
-    - [0.000796, 0.999999, -0.000796, 0.000000]
-    - [0.000000, -0.000796, -1.000000, -0.060000]
-    - [-1.000000, 0.000796, -0.000001, -0.000000]
+  T_imu_cam: #rotation from camera to IMU R_CtoI, position of camera in IMU p_CinI -- updated after downward-facing camera SDF fix (was sky-facing)
+    - [0.0, 0.0, 1.0, 0.000000]
+    - [0.0, -1.0, 0.0, -0.060000]
+    - [1.0, 0.0, 0.0, -0.000000]
     - [0.0, 0.0, 0.0, 1.0]
   cam_overlaps: [0]
   camera_model: pinhole

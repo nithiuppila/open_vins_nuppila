@@ -21,6 +21,8 @@
 
 #include "DynamicInitializer.h"
 
+#include <set>
+
 #include "ceres/Factor_GenericPrior.h"
 #include "ceres/Factor_ImageReprojCalib.h"
 #include "ceres/Factor_ImuCPIv1.h"
@@ -71,13 +73,41 @@ bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarian
   _db->cleanup_measurements(oldest_time);
   
   // nithin debug print
-	  PRINT_INFO("[INIT-D] feature_db_size=%zu init_max_features=%d\n",
-		   _db->get_internal_data().size(),
+  auto internal_feature_data = _db->get_internal_data();
+
+	PRINT_INFO("[INIT-D] feature_db_size=%zu init_max_features=%d\n",
+		   internal_feature_data.size(),
 		   params.init_max_features);
 	PRINT_INFO("[INIT-D] newest_cam=%.6f oldest=%.6f imu_buffer=%zu\n",
 		   newest_cam_time,
 		   oldest_time,
 		   imu_data->size());           
+  // EOF nithin debug print
+
+
+  // nithin debug print — feature ID overlap between consecutive DYNAMIC init attempts
+  static std::set<size_t> prev_feature_ids;
+  {
+    std::set<size_t> current_feature_ids;
+    for (const auto &pair : internal_feature_data) {
+      current_feature_ids.insert(pair.first);
+    }
+
+    int overlap_count = 0;
+    for (size_t id : current_feature_ids) {
+      if (prev_feature_ids.count(id) > 0) {
+        overlap_count++;
+      }
+    }
+
+    PRINT_INFO("[INIT-D-OVERLAP] current=%zu previous=%zu overlap=%d new=%zu\n",
+               current_feature_ids.size(),
+               prev_feature_ids.size(),
+               overlap_count,
+               current_feature_ids.size() - overlap_count);
+
+    prev_feature_ids = current_feature_ids;
+  }
   // EOF nithin debug print
   
   bool have_old_imu_readings = false;
@@ -182,6 +212,14 @@ bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarian
       have_stereo = true;
     }
     count_valid_features++;
+
+    // nithin debug print — pixel position of each valid feature, to check spatial spread
+    if (feat.second->uvs.find(0) != feat.second->uvs.end() && !feat.second->uvs.at(0).empty()) {
+      auto uv_last = feat.second->uvs.at(0).back();
+      PRINT_INFO("[INIT-D-FEATPOS] id=%zu cam0_u=%.1f cam0_v=%.1f\n", feat.first, uv_last(0), uv_last(1));
+    }
+    // EOF nithin debug print    
+
   }
 
   // Return if we do not have our full window or not enough measurements
@@ -432,6 +470,18 @@ bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarian
 
   // Constrained solving |g| = 9.81 constraint
   Eigen::MatrixXd A1 = A.block(0, 0, A.rows(), A.cols() - 3);
+
+  // nithin - debug print: check conditioning of A1 before the Cholesky solve
+  {
+    Eigen::JacobiSVD<Eigen::MatrixXd> svd_a1(A1, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    double smax = svd_a1.singularValues()(0);
+    double smin = svd_a1.singularValues()(svd_a1.singularValues().size() - 1);
+    double cond = (smin > 1e-15) ? (smax / smin) : -1.0;
+    PRINT_INFO("[INIT-D-COND] A1 rows=%ld cols=%ld smax=%.4e smin=%.4e cond=%.4e\n",
+               (long)A1.rows(), (long)A1.cols(), smax, smin, cond);
+  }
+  // EOF nithin - debug print  
+
   // Eigen::MatrixXd A1A1_inv = (A1.transpose() * A1).inverse();
   Eigen::MatrixXd A1A1_inv = (A1.transpose() * A1).llt().solve(Eigen::MatrixXd::Identity(A1.cols(), A1.cols()));
   Eigen::MatrixXd A2 = A.block(0, A.cols() - 3, A.rows(), 3);
@@ -575,13 +625,47 @@ bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarian
       Eigen::Vector3d p_FinC0 = quat_2_Rot(q_ItoC) * p_FinI0 + p_IinC;
       if (p_FinC0(2) < 0) {
         is_behind = true;
+        //nithin - debug print
+        static int behind_dbg = 0;
+        if (++behind_dbg % 5 == 0) {
+          PRINT_INFO("[INIT-D-BEHIND-DETAIL] cam_id=%zu depth=%.4f p_FinI0=(%.3f,%.3f,%.3f)\n",
+                     cam_id, p_FinC0(2), p_FinI0(0), p_FinI0(1), p_FinI0(2));
+        }
+        //nithin - debug print
       }
     }
+
+    // nithin - debug print: compare measurement count between rejected and surviving features
+    {
+      static int feat_meas_dbg = 0;
+      if (++feat_meas_dbg % 3 == 0) {
+        PRINT_INFO("[INIT-D-FEATMEAS] id=%zu meas_count=%d behind=%d p_FinI0_norm=%.4f\n",
+                   feat.first, map_features_num_meas[feat.first], is_behind ? 1 : 0, p_FinI0.norm());
+      }
+    }
+    // EOF nithin - debug print    
+
     if (!is_behind) {
       features_inI0.insert({feat.first, p_FinI0});
       count_valid_features++;
     }
   }
+  // nithin debug print — quantify the behind-camera rejection rate precisely
+  {
+    int total_candidates = 0;
+    int total_behind = 0;
+    for (auto const &feat : features) {
+      if (map_features_num_meas[feat.first] < min_num_meas_to_optimize)
+        continue;
+      total_candidates++;
+      if (features_inI0.find(feat.first) == features_inI0.end()) {
+        total_behind++;
+      }
+    }
+    PRINT_INFO("[INIT-D-BEHIND] candidates=%d behind=%d survived=%d\n",
+               total_candidates, total_behind, total_candidates - total_behind);
+  }
+  // EOF nithin debug print  
   if (count_valid_features < min_valid_features) {
     PRINT_ERROR(YELLOW "[init-d]: not enough features for our mle (%zu < %d)!\n" RESET, count_valid_features, min_valid_features);
     return false;
@@ -968,7 +1052,30 @@ bool DynamicInitializer::initialize(double &timestamp, Eigen::MatrixXd &covarian
   if (_imu == nullptr) {
     _imu = std::make_shared<ov_type::IMU>();
   }
+
   Eigen::VectorXd imu_state = get_pose(newest_cam_time);
+
+  // nithin debug print — velocity sanity check: compare MLE-refined final velocity
+  // against the initial linear-solve velocity (v_I0inI0). A large discrepancy here
+  // indicates the MLE refinement produced a poorly-constrained/spurious result
+  // (e.g. from too few valid features), even though the initial guess was good.
+  {
+    Eigen::Vector3d v_final(imu_state(7), imu_state(8), imu_state(9));
+    double v_delta = (v_final - v_I0inI0).norm();
+    constexpr double kMaxPlausibleVelDelta = 0.3; // m/s, tightened after 0.798 delta still caused post-init divergence
+
+    PRINT_INFO("[init-d-velcheck] v_I0=%.3f v_final=%.3f delta=%.3f (max=%.2f)\n",
+               v_I0inI0.norm(), v_final.norm(), v_delta, kMaxPlausibleVelDelta);
+
+    if (v_delta > kMaxPlausibleVelDelta) {
+      PRINT_WARNING(RED "[init-d]: velocity sanity check FAILED — |v_I0|=%.3f vs |v_final|=%.3f (delta=%.3f > %.2f), rejecting this init attempt!\n" RESET,
+                    v_I0inI0.norm(), v_final.norm(), v_delta, kMaxPlausibleVelDelta);
+      free_state_memory();
+      return false;
+    }
+  }
+  // EOF nithin debug print
+
   _imu->set_value(imu_state);
   _imu->set_fej(imu_state);
 
